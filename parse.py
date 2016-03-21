@@ -11,7 +11,7 @@ header_list = None
 number_of_csv_columns = None
 
 # whether to print lots of debug statements
-debug = True
+debug = False
 
 # function to build the JSON list (called from the parse loop)
 def build_json( column_index, value, is_end_of_file ):
