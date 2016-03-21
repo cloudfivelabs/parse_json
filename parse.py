@@ -1,20 +1,38 @@
 # get filename to parse or use default
 filename = raw_input("CSV file to parse:") or "text1.csv"
 
-newline_string = "\n"
-json_list = [ "[{" ]
+json_list = [ "[" ]
 header_list = None
 number_of_csv_columns = None
+debug = True
 
-def write_json( column_index, value ):
+def build_json( column_index, value, is_end_of_file ):
+
     # get the correct column header and remove any whitespace
     column_string = ( header_list[column_index] ).strip()
+    if debug: print "calling write_json with column: {}  and value: {}".format(column_index,value)
+
+    # dont add a comma to the end of the JSON
+    last_character = ','
+    if is_end_of_file:
+        last_character = ''
+
+    if column_index == 0:
+        begin = '{'
+        end = ','
+    elif column_index == 3:
+        begin = ''
+        end = '}' + last_character
+    else:
+        begin = ''
+        end = ','
 
     # treat numbers differently in JSON
+    token = ''
     if value.isdigit():
-      token =  "\""+column_string+"\": "+value+","
+      token += begin + "\"" + column_string + "\": " + value + end
     else:
-      token =  "\""+column_string+"\": \""+value+"\","
+      token += begin + "\"" + column_string + "\": \"" + value + "\"" + end
 
     json_list.append(token)
     return None
@@ -36,10 +54,6 @@ def increment_column( column ):
         column = 0
     return column
 
-# open the file as a string
-with open( filename, 'r') as file:
-  #file_string = file.read()
-
 # if the character is a number, continue until a non number is found
 #     add the number string to the json list unquoted
 #
@@ -52,79 +66,84 @@ with open( filename, 'r') as file:
 #     if character is a newline and the quote flag is not set, return
 #     if character is a newline and the quote flag is set, escape the newline
 
-  current_column = 0
+current_column = 0
 
-  digit_started = False
-  quote_started = False
+digit_started = False
+quote_started = False
+is_end_of_file = False
 
-  number_string = ''
-  token_string = ''
+number_string = ''
+token_string = ''
 
-  # get each character in the CSV file string
-  for idx, character_value in enumerate( file_string ):
+# get each character in the CSV file string
+for idx, character_value in enumerate( file_string ):
 
-    # we have started parsing digits
+    print "{} : {}".format( idx,len( file_string ) )
+    if idx + 1 == len( file_string ):
+        is_end_of_file = True
+
+    # start to parse a digit
     if character_value.isdigit():
         digit_started = True
         number_string += character_value
 
-    # we may have finished parsing digits
-    elif not character_value.isdigit() and digit_started:
+    # check to see if digit parsing is done
+    elif digit_started and not character_value.isdigit():
         digit_started = False
-        write_json( current_column, number_string)
+        build_json( current_column, number_string, is_end_of_file)
         number_string = ''
         current_column = increment_column( current_column )
 
     # SPACES
-    elif character_value == ' ' and quote_started:
-        token_string += character_value
-        print "space inside quotes"
-
-    elif character_value == ' ' and not quote_started:
-        print "space outside quotes: ", token_string
-        continue
+    elif character_value == ' ':
+        if quote_started:
+            if debug: print "space inside quotes"
+            token_string += character_value
+        else:
+            if debug: print "space outside quotes: ", token_string
+            continue
 
     # NEWLINES
-    elif character_value == '\n' and quote_started:
-        token_string += character_value
-        print "newline inside quotes"
-
-    elif character_value == '\n' and not quote_started:
-        token_string += '}\n{'
-        write_json( current_column, token_string)
-        current_column = 0
-        print "newline ended token", token_string
-        token_string = ''
+    elif character_value == '\n':
+        if quote_started:
+            if debug: print "newline inside quotes"
+            token_string += '\\n'
+        else:
+            if debug: print "newline ended token", token_string
+            build_json( current_column, token_string, is_end_of_file )
+            token_string = ''
+            current_column = 0
 
     # QUOTES
-    elif character_value == '"' and not quote_started:
-        token_string += character_value
-        quote_started = True
-        print "started quote"
-
-    elif character_value == '"' and quote_started:
-        token_string += character_value
-        quote_started = False
-        print "ended quote"
+    elif character_value == '"':
+        if not quote_started:
+            if debug: print "started quote"
+            # escape the quote for the JSON string
+            token_string += '\\"'
+            quote_started = True
+        else:
+            if debug: print "ended quote"
+            # escape the quote for the JSON string
+            token_string += '\\"'
+            quote_started = False
 
     # COMMAS
-    elif character_value == "," and quote_started:
-        token_string += character_value
-        print "found comma inside quotes"
+    elif character_value == ",":
+        if quote_started:
+            if debug: print "found comma inside quotes"
+            token_string += character_value
+        else:
+            if debug: print "ended token",token_string
+            build_json( current_column, token_string, is_end_of_file )
+            current_column = increment_column( current_column )
+            token_string = ''
 
-    elif character_value == "," and not quote_started:
-        write_json( current_column, token_string)
-        current_column = increment_column( current_column )
-        print "ended token",token_string
-        token_string = ''
-
+    # anything else
     else:
         token_string += character_value
-        #print "string parsing"
 
 json_list.append( "]" );
-
-print json_list
+print ''.join(json_list)
 
 with open ("output.json", "w") as output_file:
     for item in json_list:
